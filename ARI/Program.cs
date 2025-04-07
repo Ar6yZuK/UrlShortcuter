@@ -1,5 +1,7 @@
 using System.Net.Mime;
-using System.Text.Json.Serialization;
+using ARI.DTOs;
+using ARI.Exceptions;
+using ARI.Helpers;
 using ARI.Services;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
@@ -25,7 +27,7 @@ app.UseExceptionHandler(exceptionHandlerApp =>
 
             if (exceptionHandlerPathFeature?.Error is AriNotExistsException)
             {
-                await context.Response.WriteAsync("Ari is not exists. Create by Post to /create.");
+                await context.Response.WriteAsync("Ari is not exists. Create it by Post to /create.");
             }
         });
     });
@@ -50,14 +52,3 @@ app.MapGet("/{ariId}", async ([FromRoute] string ariId, HttpContext httpContext,
 	});
 
 app.Run();
-
-public record CreateARIDTO(Uri UriToAri);
-public record ARIDTO(Uri Ari, string AriId);
-[JsonSerializable(typeof(CreateARIDTO))]
-[JsonSerializable(typeof(ARIDTO))]
-internal partial class AppJsonSerializerContext : JsonSerializerContext { }
-
-public class ServiceKeys
-{
-	public const string BaseUriKey = "BaseUri";
-}

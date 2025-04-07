@@ -1,4 +1,8 @@
 using System.Security.Cryptography;
+using ARI.DTOs;
+using ARI.Entities;
+using ARI.Exceptions;
+using ARI.Helpers;
 
 namespace ARI.Services;
 
@@ -33,23 +37,4 @@ public class ARIService([FromKeyedServices(ServiceKeys.BaseUriKey)] Uri baseUri)
 
 		return Task.FromResult(ariEntity.OriginalUri);
 	}
-}
-
-public class AriNotExistsException(string notExistingAriId) : Exception
-{
-	public string NotExistingAriId { get; } = notExistingAriId;
-}
-
-public class AriEntity
-{
-	public required Uri OriginalUri { get; set; }
-	public required Uri Ari { get; set; }
-
-	public string AriId { get; set; }
-}
-
-public class AriAlreadyExistsException(CreateARIDTO createRequest, AriEntity ariEntity) : Exception
-{
-	public AriEntity ARIEntity { get; } = ariEntity;
-	public CreateARIDTO RequestCreateAri { get; } = createRequest;
 }
