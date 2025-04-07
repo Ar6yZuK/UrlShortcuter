@@ -1,5 +1,13 @@
 @ARI_HostAddress = http://localhost:5181
 
+POST {{ARI_HostAddress}}/create
+Content-Type: application/json
+
+{
+  "UriToAri": "https://www.google.com"
+}
+
+###
 #GET {{ARI_HostAddress}}/todos/
 #Accept: application/json
 

@@ -1,16 +1,23 @@
 using System.Net.Mime;
+using ARI;
 using ARI.DTOs;
 using ARI.Exceptions;
 using ARI.Helpers;
 using ARI.Services;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateSlimBuilder(args);
+ConfigurationManager configuration = builder.Configuration;
+// use AppDbContext.Database.EnsureCreated() on first start
+builder.Services.AddDbContext<AppDbContext>(x=>x.UseNpgsql(configuration.AddUserSecrets<Program>().Build().GetConnectionString("Default")));
+
 builder.Services.AddProblemDetails();
 
 builder.Services.ConfigureHttpJsonOptions(options => { options.SerializerOptions.TypeInfoResolverChain.Insert(0, AppJsonSerializerContext.Default); });
-builder.Services.AddSingleton<IARIService, ARIService>();
+builder.Services.AddTransient<IARIService, ARIService>();
+builder.Services.AddTransient<IAriGenerator, HashCodeAriGenerator>();
 builder.Services.AddKeyedTransient<Uri>(ServiceKeys.BaseUriKey, (sp, key) => new Uri("http://localhost:5181/"));
 
 var app = builder.Build();
@@ -32,11 +39,11 @@ app.UseExceptionHandler(exceptionHandlerApp =>
         });
     });
 
-app.MapPost("/create", async (CreateARIDTO createAriRequest, IARIService ariService) =>
+app.MapPost("/create", async (CreateARIDTO createAriRequest, IARIService ariService, CancellationToken ct) =>
 	{
 		try
 		{
-			ARIDTO createdAri = await ariService.CreateAri(createAriRequest);
+			ARIDTO createdAri = await ariService.CreateAri(createAriRequest, ct);
 			return createdAri.Ari;
 		}
 		catch (AriAlreadyExistsException ex)
@@ -45,9 +52,9 @@ app.MapPost("/create", async (CreateARIDTO createAriRequest, IARIService ariServ
 		}
 	});
 
-app.MapGet("/{ariId}", async ([FromRoute] string ariId, HttpContext httpContext, IARIService ariService) =>
+app.MapGet("/{ariId}", async ([FromRoute] string ariId, HttpContext httpContext, IARIService ariService, CancellationToken ct) =>
 	{
-		Uri uri = await ariService.GetUriFromAriId(ariId);
+		Uri uri = await ariService.GetUriFromAriId(ariId, ct);
 		httpContext.Response.Redirect(uri.ToString());
 	});
 

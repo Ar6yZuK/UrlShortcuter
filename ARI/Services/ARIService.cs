@@ -1,40 +1,67 @@
-using System.Security.Cryptography;
 using ARI.DTOs;
 using ARI.Entities;
 using ARI.Exceptions;
-using ARI.Helpers;
+using Microsoft.EntityFrameworkCore;
 
 namespace ARI.Services;
 
 public interface IARIService
 {
 	/// <exception cref="AriAlreadyExistsException"></exception>
-	Task<ARIDTO> CreateAri(CreateARIDTO ari);
+	Task<ARIDTO> CreateAri(CreateARIDTO ari, CancellationToken ct = default);
 	/// <exception cref="AriNotExistsException"></exception>
-	Task<Uri> GetUriFromAriId(string ariId);
+	Task<Uri> GetUriFromAriId(string ariId, CancellationToken ct = default);
 }
 
-public class ARIService([FromKeyedServices(ServiceKeys.BaseUriKey)] Uri baseUri) : IARIService
+public class ARIService(AppDbContext dbContext, IAriGenerator ariGenerator) : IARIService
+{
+	public async Task<ARIDTO> CreateAri(CreateARIDTO ari, CancellationToken ct)
+	{
+		if (await dbContext.Aris.SingleOrDefaultAsync(x => x.OriginalUri == ari.UriToAri, ct) is not { } ariEntity)
+		{
+			ariEntity = ariGenerator.Generate(ari);
+			await dbContext.Aris.AddAsync(ariEntity, ct);
+			await dbContext.SaveChangesAsync(ct);
+		}
+
+		return new ARIDTO(ariEntity.Ari, ariEntity.AriId);
+	}
+	public async Task<Uri> GetUriFromAriId(string ariId, CancellationToken ct)
+	{
+		if (await dbContext.Aris.SingleOrDefaultAsync(x => x.AriId == ariId, ct) is not { } ariEntity)
+			throw new AriNotExistsException(ariId);
+
+		return ariEntity.OriginalUri;
+	}
+}
+
+public class ARIServiceLocalCached(IAriGenerator ariGenerator) : IARIService
 {
 	private readonly IList<AriEntity> _cache = [];
-	public Task<ARIDTO> CreateAri(CreateARIDTO ari)
+	public Task<ARIDTO> CreateAri(CreateARIDTO ari, CancellationToken ct = default)
 	{
-		int hashCode = ari.GetHashCode();
-		string ariId = hashCode.ToString();
-		var result = new Uri(baseUri, ariId);
-		if (_cache.SingleOrDefault(x => x.AriId == ariId || x.OriginalUri == ari.UriToAri) is { } ariEntity)
-			throw new AriAlreadyExistsException(ari, ariEntity);
-		while (_cache.SingleOrDefault(x => x.Ari == result) is not null)
-			result = new Uri(baseUri, RandomNumberGenerator.GetInt32(int.MaxValue).ToString());
+		AriEntity entity = ariGenerator.Generate(ari);
 
-		_cache.Add(new AriEntity { Ari = result, OriginalUri = ari.UriToAri, AriId = ariId });
-		return Task.FromResult(new ARIDTO(result, ariId));
+		_cache.ValidateExistence(ari, entity);
+
+		_cache.Add(entity);
+		return Task.FromResult(new ARIDTO(entity.Ari, entity.AriId));
 	}
-	public Task<Uri> GetUriFromAriId(string ariId)
+	public Task<Uri> GetUriFromAriId(string ariId, CancellationToken ct = default)
 	{
 		if (_cache.SingleOrDefault(x => x.AriId == ariId) is not { } ariEntity)
 			throw new AriNotExistsException(ariId);
 
 		return Task.FromResult(ariEntity.OriginalUri);
+	}
+}
+
+file static class EntitiesExtensions
+{
+	/// <exception cref="AriAlreadyExistsException"></exception>
+	public static void ValidateExistence(this IEnumerable<AriEntity> entities, CreateARIDTO ari, AriEntity entity)
+	{
+		if (entities.SingleOrDefault(x => x.AriId == entity.AriId || x.OriginalUri == ari.UriToAri) is { } ariEntity)
+			throw new AriAlreadyExistsException(ari, ariEntity);
 	}
 }
